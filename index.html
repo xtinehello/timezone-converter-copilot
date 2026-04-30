@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>U.S. Time Zone Converter (DST Toggle)</title>
+  <style>
+    :root{--bg:#0b1220;--card:#121b2e;--muted:#93a4c7;--text:#eaf0ff;--accent:#6ea8fe;--border:rgba(255,255,255,.12);--good:#2dd4bf;--warn:#fbbf24;}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#071024 0%,#0b1220 35%,#070c18 100%);color:var(--text);}
+    .wrap{max-width:980px;margin:28px auto;padding:0 16px;}
+    h1{font-size:22px;margin:0 0 6px 0;letter-spacing:.2px;}
+    p{margin:0 0 18px 0;color:var(--muted);line-height:1.4;}
+    .grid{display:grid;grid-template-columns:1fr;gap:14px;}
+    @media(min-width:860px){.grid{grid-template-columns:360px 1fr;}}
+    .card{background:rgba(18,27,46,.85);border:1px solid var(--border);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.25);}
+    .card .hd{padding:14px 16px;border-bottom:1px solid var(--border);font-weight:700;}
+    .card .bd{padding:14px 16px;}
+    label{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px;}
+    select,button{width:100%;padding:10px 10px;border-radius:12px;border:1px solid var(--border);background:#0c1426;color:var(--text);font-size:14px;outline:none;}
+    .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:999px;border:1px solid var(--border);background:rgba(12,20,38,.7);color:var(--muted);font-size:12px;}
+    table{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border-radius:14px;border:1px solid var(--border);}
+    thead th{background:rgba(110,168,254,.14);color:var(--text);text-align:left;font-size:12px;letter-spacing:.2px;padding:10px;border-bottom:1px solid var(--border);}
+    tbody td{padding:10px;border-bottom:1px solid var(--border);font-size:14px;}
+    tbody tr:last-child td{border-bottom:none;}
+    .muted{color:var(--muted);font-size:12px;}
+    .shift{font-variant-numeric:tabular-nums;}
+    .shift.same{color:var(--good);} .shift.prev,.shift.next{color:var(--warn);} 
+    .copy{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px;}
+    .copy button{width:auto;flex:0 0 auto;padding:10px 12px;cursor:pointer;}
+    .copy .out{flex:1 1 240px;min-width:240px;padding:10px 12px;border-radius:12px;border:1px solid var(--border);background:#0c1426;color:var(--text);font-size:13px;}
+    .foot{margin-top:14px;color:var(--muted);font-size:12px;line-height:1.35;}
+    code{background:rgba(255,255,255,.06);padding:2px 6px;border-radius:8px;}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>U.S. Time Zone Converter (DST Toggle)</h1>
+    <p>Enter a time in one zone and see the impact across U.S. time zones and territories (includes CHST, SST, AST, and Arizona broken out). Uses a manual Standard vs Daylight toggle; zones that don’t observe DST stay fixed.</p>
+
+    <div class="grid">
+      <div class="card">
+        <div class="hd">Inputs</div>
+        <div class="bd">
+          <label>Time (12-hour)</label>
+          <div class="row">
+            <select id="hour"></select>
+            <select id="minute"></select>
+            <select id="ampm">
+              <option>AM</option>
+              <option>PM</option>
+            </select>
+          </div>
+
+          <label>Source time zone</label>
+          <select id="source"></select>
+
+          <label>Mode</label>
+          <select id="mode">
+            <option value="Standard">Standard</option>
+            <option value="Daylight" selected>Daylight</option>
+          </select>
+
+          <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+            <span class="pill" id="summary"></span>
+            <span class="pill">Arizona, AST (PR/USVI), Hawaii, CHST, SST do not change for DST</span>
+          </div>
+
+          <div class="foot">
+            <div><strong>Day shift</strong> shows whether the converted time lands on the <em>previous</em> day, <em>same</em> day, or <em>next</em> day relative to your entered time (without showing a date).</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="hd">Converted times</div>
+        <div class="bd">
+          <table>
+            <thead>
+              <tr><th style="width:42%">Time zone</th><th style="width:30%">Local time</th><th>Day shift</th></tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+
+          <div class="copy">
+            <button id="copyBtn">Copy one-line summary</button>
+            <input class="out" id="oneLine" readonly />
+          </div>
+          <div class="muted" style="margin-top:8px;">Tip: paste the one-line summary into emails/slides (e.g., <code>8:00 PM ET / 7:00 PM CT / …</code>).</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // Offsets are expressed as minutes from UTC.
+  // Standard vs Daylight toggle only applies to zones that observe DST.
+  const ZONES = [
+    { key:"CHST", label:"CHST (Guam)", std: 10*60, dst: 10*60, observes:false, abbr:"CHST" },
+    { key:"SST",  label:"SST (American Samoa)", std:-11*60, dst:-11*60, observes:false, abbr:"SST" },
+    { key:"AST",  label:"AST (Puerto Rico / U.S. Virgin Islands)", std:-4*60, dst:-4*60, observes:false, abbr:"AST" },
+    { key:"ET",   label:"Eastern",  std:-5*60, dst:-4*60, observes:true,  abbr:"ET" },
+    { key:"CT",   label:"Central",  std:-6*60, dst:-5*60, observes:true,  abbr:"CT" },
+    { key:"MT",   label:"Mountain", std:-7*60, dst:-6*60, observes:true,  abbr:"MT" },
+    { key:"AZ",   label:"Arizona (no DST)", std:-7*60, dst:-7*60, observes:false, abbr:"AZ" },
+    { key:"PT",   label:"Pacific",  std:-8*60, dst:-7*60, observes:true,  abbr:"PT" },
+    { key:"AK",   label:"Alaska",   std:-9*60, dst:-8*60, observes:true,  abbr:"AK" },
+    { key:"HI",   label:"Hawaii",   std:-10*60, dst:-10*60, observes:false, abbr:"HI" },
+  ];
+
+  const elHour = document.getElementById('hour');
+  const elMinute = document.getElementById('minute');
+  const elAmPm = document.getElementById('ampm');
+  const elSource = document.getElementById('source');
+  const elMode = document.getElementById('mode');
+  const elRows = document.getElementById('rows');
+  const elSummary = document.getElementById('summary');
+  const elOneLine = document.getElementById('oneLine');
+  const elCopyBtn = document.getElementById('copyBtn');
+
+  // Populate time inputs
+  for (let h=1; h<=12; h++) {
+    const o=document.createElement('option');
+    o.value=h; o.textContent=String(h);
+    elHour.appendChild(o);
+  }
+  for (let m=0; m<60; m++) {
+    const o=document.createElement('option');
+    o.value=m; o.textContent=String(m).padStart(2,'0');
+    elMinute.appendChild(o);
+  }
+
+  // Defaults: current local time
+  (function setDefaults(){
+    const now = new Date();
+    let h = now.getHours();
+    const m = now.getMinutes();
+    const am = h < 12;
+    h = h % 12; if (h===0) h=12;
+    elHour.value = String(h);
+    elMinute.value = String(m);
+    elAmPm.value = am ? 'AM' : 'PM';
+  })();
+
+  // Populate zones
+  ZONES.forEach(z => {
+    const o=document.createElement('option');
+    o.value=z.key;
+    o.textContent=z.label;
+    elSource.appendChild(o);
+  });
+  elSource.value = 'ET';
+
+  function toMinutesSinceMidnight12h(hour12, minute, ampm){
+    let h = Number(hour12) % 12;
+    if (ampm === 'PM') h += 12;
+    return h*60 + Number(minute);
+  }
+
+  function format12h(totalMinutes){
+    // totalMinutes may be negative or > 1440. Keep only time portion.
+    let mins = ((totalMinutes % 1440) + 1440) % 1440;
+    let h24 = Math.floor(mins/60);
+    const m = mins % 60;
+    const am = h24 < 12;
+    let h12 = h24 % 12; if (h12 === 0) h12 = 12;
+    return `${h12}:${String(m).padStart(2,'0')} ${am ? 'AM' : 'PM'}`;
+  }
+
+  function dayShift(deltaMinutes){
+    if (deltaMinutes < 0) return {v:-1, cls:'prev', label:'Prev day'};
+    if (deltaMinutes >= 1440) return {v:+1, cls:'next', label:'Next day'};
+    return {v:0, cls:'same', label:'Same day'};
+  }
+
+  function effectiveOffset(zone){
+    const mode = elMode.value;
+    if (mode === 'Daylight' && zone.observes) return zone.dst;
+    return zone.std;
+  }
+
+  function recompute(){
+    const base = toMinutesSinceMidnight12h(elHour.value, elMinute.value, elAmPm.value);
+    const source = ZONES.find(z => z.key === elSource.value);
+    const srcOffset = effectiveOffset(source);
+
+    elSummary.textContent = `Source: ${source.abbr} • ${format12h(base)} • Mode: ${elMode.value}`;
+
+    // For each target: base time in UTC minutes = base - srcOffset
+    // Then local = utc + targetOffset
+    const utcMinutes = base - srcOffset;
+
+    // Build table
+    elRows.innerHTML = '';
+
+    const lines = [];
+
+    ZONES.forEach(z => {
+      const tgtOffset = effectiveOffset(z);
+      const local = utcMinutes + tgtOffset;
+      const localTime = format12h(local);
+      const shift = dayShift(local);
+
+      const tr=document.createElement('tr');
+      const td1=document.createElement('td');
+      td1.textContent = z.label;
+      const td2=document.createElement('td');
+      td2.textContent = localTime;
+      const td3=document.createElement('td');
+      td3.innerHTML = `<span class="shift ${shift.cls}">${shift.label}</span>`;
+
+      tr.appendChild(td1); tr.appendChild(td2); tr.appendChild(td3);
+      elRows.appendChild(tr);
+
+      // One-line summary: keep the major ones first, then territories
+    });
+
+    const pick = (key) => {
+      const z = ZONES.find(x=>x.key===key);
+      const local = utcMinutes + effectiveOffset(z);
+      return `${format12h(local)} ${z.abbr}`;
+    };
+
+    const one = [
+      `${pick('ET')}`,
+      `${pick('CT')}`,
+      `${pick('MT')}`,
+      `${pick('AZ')}`,
+      `${pick('PT')}`,
+      `${pick('AK')}`,
+      `${pick('HI')}`,
+      `${pick('AST')}`,
+      `${pick('SST')}`,
+      `${pick('CHST')}`,
+    ].join(' / ');
+
+    elOneLine.value = one;
+  }
+
+  [elHour, elMinute, elAmPm, elSource, elMode].forEach(el => el.addEventListener('change', recompute));
+
+  elCopyBtn.addEventListener('click', async () => {
+    try{
+      await navigator.clipboard.writeText(elOneLine.value);
+      elCopyBtn.textContent = 'Copied!';
+      setTimeout(()=> elCopyBtn.textContent='Copy one-line summary', 1000);
+    }catch(e){
+      // Fallback: select text
+      elOneLine.focus();
+      elOneLine.select();
+      document.execCommand('copy');
+    }
+  });
+
+  recompute();
+</script>
+</body>
+</html>
